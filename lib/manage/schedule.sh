@@ -193,27 +193,70 @@ schedule_remove() {
 }
 
 schedule_status() {
-    if [[ ! -f "$SCHEDULE_PLIST_PATH" ]]; then
-        echo -e "${YELLOW}${ICON_WARNING}${NC} LaunchAgent not installed"
-        return 0
-    fi
+    echo -e "${BLUE}Mole Scheduled Jobs${NC}"
+    echo ""
 
-    echo -e "${GREEN}${ICON_SUCCESS}${NC} LaunchAgent installed"
-    echo -e "  ${GRAY}${ICON_SUBLIST} ${SCHEDULE_PLIST_PATH}${NC}"
+    # Check for the main maintenance agent
+    if [[ -f "$SCHEDULE_PLIST_PATH" ]]; then
+        echo -e "  ${GREEN}${ICON_SUCCESS}${NC} Maintenance agent installed"
+        echo -e "    ${GRAY}Path: ${SCHEDULE_PLIST_PATH}${NC}"
 
-    # Extract interval from plist
-    local interval=""
-    interval=$(sed -n '/<key>StartInterval<\/key>/{n;s/.*<integer>\([0-9]*\)<\/integer>.*/\1/p;}' "$SCHEDULE_PLIST_PATH" 2>/dev/null || true)
-    if [[ -n "$interval" ]]; then
-        echo -e "  ${GRAY}${ICON_SUBLIST} Interval: $(format_interval_human "$interval")${NC}"
-    fi
+        # Extract interval from plist
+        local interval=""
+        interval=$(sed -n '/<key>StartInterval<\/key>/{n;s/.*<integer>\([0-9]*\)<\/integer>.*/\1/p;}' "$SCHEDULE_PLIST_PATH" 2>/dev/null || true)
+        if [[ -n "$interval" ]]; then
+            echo -e "    ${GRAY}Interval: $(format_interval_human "$interval")${NC}"
+        fi
 
-    # Check if loaded
-    if launchctl list 2>/dev/null | grep -q "$SCHEDULE_LABEL"; then
-        echo -e "  ${GREEN}${ICON_SUCCESS}${NC} Agent is loaded and active"
+        # Extract command from plist
+        local has_dry_run=false
+        if grep -q "\-\-dry-run" "$SCHEDULE_PLIST_PATH" 2>/dev/null; then
+            has_dry_run=true
+        fi
+        if [[ "$has_dry_run" == "true" ]]; then
+            echo -e "    ${GRAY}Mode: dry-run (preview only)${NC}"
+        else
+            echo -e "    ${RED}Mode: LIVE (will delete files!)${NC}"
+        fi
+
+        # Check if loaded
+        if launchctl list 2>/dev/null | command grep -q "$SCHEDULE_LABEL"; then
+            echo -e "    ${GREEN}${ICON_SUCCESS} Loaded and active${NC}"
+        else
+            echo -e "    ${YELLOW}${ICON_WARNING} Not currently loaded${NC}"
+        fi
     else
-        echo -e "  ${YELLOW}${ICON_WARNING}${NC} Agent is not currently loaded"
+        echo -e "  ${GRAY}${ICON_WARNING}${NC} No maintenance agent installed"
     fi
+
+    # Scan for any other mole-related LaunchAgents
+    local agents_dir="$HOME/Library/LaunchAgents"
+    if [[ -d "$agents_dir" ]]; then
+        local -a other_agents=()
+        local agent
+        for agent in "$agents_dir"/fun.tw93.mole.* "$agents_dir"/*mole*; do
+            [[ -f "$agent" ]] || continue
+            [[ "$agent" == "$SCHEDULE_PLIST_PATH" ]] && continue
+            other_agents+=("$agent")
+        done
+
+        if [[ ${#other_agents[@]} -gt 0 ]]; then
+            echo ""
+            echo -e "  ${YELLOW}${ICON_WARNING}${NC} Other mole-related agents found:"
+            for agent in "${other_agents[@]}"; do
+                local label
+                label=$(basename "$agent" .plist)
+                local is_loaded=""
+                if launchctl list 2>/dev/null | command grep -q "$label"; then
+                    is_loaded=" (loaded)"
+                fi
+                echo -e "    ${GRAY}${ICON_SUBLIST} ${agent}${is_loaded}${NC}"
+            done
+        fi
+    fi
+
+    echo ""
+    echo -e "  ${GRAY}Manage: mo schedule install | mo schedule remove${NC}"
 }
 
 # ============================================================================
@@ -227,8 +270,8 @@ show_schedule_help() {
     echo ""
     echo "Commands:"
     echo "  install             Install the LaunchAgent plist"
-    echo "  remove              Remove the LaunchAgent plist"
-    echo "  status              Show current schedule status"
+    echo "  remove              Remove the LaunchAgent plist (alias: unschedule)"
+    echo "  status              Show all scheduled jobs (alias: list)"
     echo ""
     echo "Install options:"
     echo "  --dry-run, -n       Show plist without installing"
@@ -266,10 +309,10 @@ main() {
         install)
             schedule_install "$@"
             ;;
-        remove)
+        remove | unschedule)
             schedule_remove
             ;;
-        status)
+        status | list)
             schedule_status
             ;;
         *)
