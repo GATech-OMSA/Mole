@@ -5,7 +5,12 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve config/lib directory: prefer ~/.config/mole (manual install),
+# fall back to script's own directory (Homebrew/dev layout).
+SCRIPT_DIR="${MOLE_CONFIG_DIR:-$HOME/.config/mole}"
+if [[ ! -f "$SCRIPT_DIR/lib/core/common.sh" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 
 source "$SCRIPT_DIR/lib/core/common.sh"
 source "$SCRIPT_DIR/lib/core/commands.sh"

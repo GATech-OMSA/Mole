@@ -3,6 +3,16 @@
 set -euo pipefail
 # System caches, logs, and temp files.
 clean_deep_system() {
+    # Verify sudo session is active before running any privileged operations.
+    # Without this, each bare "sudo" call below independently prompts for
+    # password when the keepalive has expired — causing repeated prompts.
+    if ! has_sudo_session; then
+        if ! ensure_sudo_session "System cleanup requires admin access"; then
+            log_warning "System cleanup skipped (sudo denied)"
+            return 0
+        fi
+    fi
+
     stop_section_spinner
     local cache_cleaned=0
     start_section_spinner "Cleaning system caches..."

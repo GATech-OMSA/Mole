@@ -9,18 +9,30 @@ set -euo pipefail
 # ============================================================================
 
 check_touchid_support() {
-    # Check sudo_local first (Sonoma+)
+    # First: check that pam_tid.so is configured in PAM stack
+    local pam_configured=false
     if [[ -f /etc/pam.d/sudo_local ]]; then
-        grep -q "pam_tid.so" /etc/pam.d/sudo_local 2> /dev/null
-        return $?
+        grep -q "pam_tid.so" /etc/pam.d/sudo_local 2> /dev/null && pam_configured=true
+    elif [[ -f /etc/pam.d/sudo ]]; then
+        grep -q "pam_tid.so" /etc/pam.d/sudo 2> /dev/null && pam_configured=true
     fi
 
-    # Fallback to checking sudo directly
-    if [[ -f /etc/pam.d/sudo ]]; then
-        grep -q "pam_tid.so" /etc/pam.d/sudo 2> /dev/null
-        return $?
+    if [[ "$pam_configured" != "true" ]]; then
+        return 1
     fi
-    return 1
+
+    # Second: verify Touch ID is actually usable (has enrolled fingerprints).
+    # Corporate MDM can disable biometric enrollment while leaving pam_tid.so
+    # in the PAM config, causing sudo -v to trigger a broken Touch ID prompt.
+    if command -v bioutil > /dev/null 2>&1; then
+        local bio_output=""
+        bio_output=$(bioutil -c -s 2>/dev/null || true)
+        if [[ -n "$bio_output" ]] && ! echo "$bio_output" | grep -q "count: [1-9]"; then
+            return 1
+        fi
+    fi
+
+    return 0
 }
 
 # Detect clamshell mode (lid closed)
@@ -242,12 +254,17 @@ _start_sudo_keepalive() {
     # This is critical: command substitution waits for all file descriptors to close
     (
         # Initial delay to let sudo cache stabilize after password entry
-        # This prevents immediately triggering Touch ID again
         sleep 2
 
         local retry_count=0
         while true; do
-            if ! sudo -n -v 2> /dev/null; then
+            # Use "sudo -n true" instead of "sudo -n -v" to avoid pam_tid.so
+            # interference on machines where Touch ID is configured but disabled
+            # (e.g., corporate MDM). "sudo -n -v" triggers the full PAM stack
+            # including Touch ID, which fails and causes the keepalive to
+            # self-terminate after 3 retries. "sudo -n true" only checks the
+            # existing credential cache without re-triggering authentication.
+            if ! sudo -n true 2> /dev/null; then
                 retry_count=$((retry_count + 1))
                 if [[ $retry_count -ge 3 ]]; then
                     exit 1

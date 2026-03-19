@@ -655,9 +655,8 @@ install_files() {
         chmod +x "$CONFIG_DIR/install.sh"
     fi
 
-    if [[ "$source_dir_abs" != "$install_dir_abs" ]]; then
-        maybe_sudo sed -i '' "s|SCRIPT_DIR=.*|SCRIPT_DIR=\"$CONFIG_DIR\"|" "$INSTALL_DIR/mole"
-    fi
+    # No sed patching needed: mole resolves SCRIPT_DIR at runtime via
+    # $MOLE_CONFIG_DIR or $HOME/.config/mole, with fallback to script dir.
 
     if ! download_binary "analyze"; then
         exit 1

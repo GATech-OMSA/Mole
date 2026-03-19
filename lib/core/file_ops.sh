@@ -381,6 +381,11 @@ safe_sudo_remove() {
         return 0
     fi
 
+    # Propagate signal exits (Ctrl+C, SIGTERM) instead of masking them
+    if [[ $ret -ge 128 ]]; then
+        return "$ret"
+    fi
+
     case "$output" in
         *"Operation not permitted"*)
             log_operation "${MOLE_CURRENT_COMMAND:-clean}" "FAILED" "$path" "sip/mdm protected"
