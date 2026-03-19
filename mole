@@ -144,8 +144,23 @@ check_for_updates() {
     ensure_user_dir "$(dirname "$msg_cache")"
     ensure_user_file "$msg_cache"
 
+    # Skip if we checked within the last hour to reduce startup latency.
+    # The background job runs GitHub API + brew calls that can take 3-9s.
+    local check_ts_file="$HOME/.cache/mole/version_check_time"
+    if [[ -f "$check_ts_file" ]]; then
+        local last_check
+        last_check=$(cat "$check_ts_file" 2>/dev/null || echo "0")
+        local now
+        now=$(date +%s 2>/dev/null || echo "0")
+        if [[ "$last_check" =~ ^[0-9]+$ && "$now" =~ ^[0-9]+$ && $((now - last_check)) -lt 3600 ]]; then
+            return 0
+        fi
+    fi
+
     (
         (
+            # Record check timestamp
+            date +%s > "${check_ts_file}.tmp" 2>/dev/null && mv -f "${check_ts_file}.tmp" "$check_ts_file" 2>/dev/null || true
             local latest
 
             latest=$(get_latest_version_from_github)
@@ -653,8 +668,8 @@ remove_mole() {
     for install in ${manual_installs[@]+"${manual_installs[@]}"} ${alias_installs[@]+"${alias_installs[@]}"}; do
         echo "  ${ICON_LIST} $install"
     done
-    echo "  ${ICON_LIST} ~/.config/mole"
-    echo "  ${ICON_LIST} ~/.cache/mole"
+    [[ -d "$HOME/.config/mole" ]] && echo "  ${ICON_LIST} ~/.config/mole"
+    [[ -d "$HOME/.cache/mole" ]] && echo "  ${ICON_LIST} ~/.cache/mole"
     echo -ne "${PURPLE}${ICON_ARROW}${NC} Press ${GREEN}Enter${NC} to confirm, ${GRAY}ESC${NC} to cancel: "
 
     IFS= read -r -s -n1 key || key=""
@@ -742,7 +757,6 @@ remove_mole() {
 # Menu UI
 show_main_menu() {
     local selected="${1:-1}"
-    local _full_draw="${2:-true}" # Kept for compatibility (unused)
     local banner="${MAIN_MENU_BANNER:-}"
     local update_message="${MAIN_MENU_UPDATE_MESSAGE:-}"
 
@@ -792,7 +806,6 @@ show_main_menu() {
 
 interactive_main_menu() {
     local current_option=1
-    local first_draw=true
     local brand_banner=""
     local msg_cache="$HOME/.cache/mole/update_message"
     local update_message=""
@@ -815,10 +828,7 @@ interactive_main_menu() {
     hide_cursor
 
     while true; do
-        show_main_menu $current_option "$first_draw"
-        if [[ "$first_draw" == "true" ]]; then
-            first_draw=false
-        fi
+        show_main_menu $current_option
 
         local key
         if ! key=$(read_key); then
@@ -875,7 +885,12 @@ interactive_main_menu() {
                 exec "$SCRIPT_DIR/bin/touchid.sh"
                 ;;
             "UPDATE")
-                [[ "${MAIN_MENU_SHOW_UPDATE:-false}" == "true" ]] || continue
+                if [[ "${MAIN_MENU_SHOW_UPDATE:-false}" != "true" ]]; then
+                    # Briefly show feedback when user presses U but no update is available
+                    printf '\r\033[2K  %s' "Already on latest version"
+                    sleep 1
+                    continue
+                fi
                 show_cursor
                 clear
                 update_mole

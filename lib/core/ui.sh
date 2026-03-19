@@ -387,13 +387,6 @@ stop_inline_spinner() {
     fi
 }
 
-# Get spinner characters
-mo_spinner_chars() {
-    local chars="|/-\\"
-    [[ -z "$chars" ]] && chars="|/-\\"
-    printf "%s" "$chars"
-}
-
 # Format relative time for compact display (e.g., 3d ago)
 format_last_used_summary() {
     local value="$1"

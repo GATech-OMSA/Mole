@@ -743,6 +743,7 @@ start_cleanup() {
 
     if [[ "$DRY_RUN" == "true" ]]; then
         echo -e "${YELLOW}Dry Run Mode${NC}, Preview only, no deletions"
+        echo -e "  File list will be saved to: ${GRAY}$EXPORT_LIST_FILE${NC}"
         echo ""
 
         ensure_user_file "$EXPORT_LIST_FILE"

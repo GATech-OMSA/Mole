@@ -116,8 +116,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
 			return m, tea.Quit
-		case "k":
-			// Toggle cat visibility and persist preference
+		case "c":
+			// Toggle cat visibility and persist preference.
+			// Uses "c" instead of "k" to avoid conflicting with
+			// vim navigation (j/k) used in all other mole commands.
 			m.catHidden = !m.catHidden
 			saveCatHidden(m.catHidden)
 			return m, nil

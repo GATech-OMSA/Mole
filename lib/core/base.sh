@@ -720,6 +720,11 @@ update_progress_if_needed() {
     local current_time
     current_time=$(get_epoch_seconds)
 
+    # Validate variable name before eval to prevent code injection
+    if [[ ! "$last_update_var" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        return 1
+    fi
+
     # Get last update time from variable
     local last_time
     eval "last_time=\${$last_update_var:-0}"

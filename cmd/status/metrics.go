@@ -76,7 +76,6 @@ type MetricsSnapshot struct {
 	Proxy          ProxyStatus       `json:"proxy"`
 	Batteries      []BatteryStatus   `json:"batteries"`
 	Thermal        ThermalStatus     `json:"thermal"`
-	Sensors        []SensorReading   `json:"sensors"`
 	Bluetooth      []BluetoothDevice `json:"bluetooth"`
 	TopProcesses   []ProcessInfo     `json:"top_processes"`
 }
@@ -247,7 +246,6 @@ func (c *Collector) Collect() (MetricsSnapshot, error) {
 		proxyStats   ProxyStatus
 		batteryStats []BatteryStatus
 		thermalStats ThermalStatus
-		sensorStats  []SensorReading
 		gpuStats     []GPUStatus
 		btStats      []BluetoothDevice
 		topProcs     []ProcessInfo
@@ -289,8 +287,6 @@ func (c *Collector) Collect() (MetricsSnapshot, error) {
 	collect(func() (err error) { proxyStats = collectProxy(); return nil })
 	collect(func() (err error) { batteryStats, _ = collectBatteries(); return nil })
 	collect(func() (err error) { thermalStats = collectThermal(); return nil })
-	// Sensors disabled - CPU temp already shown in CPU card
-	// collect(func() (err error) { sensorStats, _ = collectSensors(); return nil })
 	collect(func() (err error) { gpuStats, err = c.collectGPU(now); return })
 	collect(func() (err error) {
 		// Bluetooth is slow; cache for 30s.
@@ -341,7 +337,6 @@ func (c *Collector) Collect() (MetricsSnapshot, error) {
 		Proxy:        proxyStats,
 		Batteries:    batteryStats,
 		Thermal:      thermalStats,
-		Sensors:      sensorStats,
 		Bluetooth:    btStats,
 		TopProcesses: topProcs,
 	}, mergeErr

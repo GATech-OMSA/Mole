@@ -25,11 +25,6 @@ setup() {
     mkdir -p "$HOME"
 }
 
-@test "mo_spinner_chars returns default sequence" {
-    result="$(HOME="$HOME" bash --noprofile --norc -c "source '$PROJECT_ROOT/lib/core/common.sh'; mo_spinner_chars")"
-    [ "$result" = "|/-\\" ]
-}
-
 @test "detect_architecture maps current CPU to friendly label" {
     expected="Intel"
     if [[ "$(uname -m)" == "arm64" ]]; then
