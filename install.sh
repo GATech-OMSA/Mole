@@ -519,12 +519,12 @@ download_binary() {
     fi
 
     if [[ -f "$SOURCE_DIR/bin/${binary_name}-go" ]]; then
-        cp "$SOURCE_DIR/bin/${binary_name}-go" "$target_path"
+        command cp -f "$SOURCE_DIR/bin/${binary_name}-go" "$target_path"
         chmod +x "$target_path"
         log_success "Installed local ${binary_name} binary"
         return 0
     elif [[ -f "$SOURCE_DIR/bin/${binary_name}-darwin-${arch_suffix}" ]]; then
-        cp "$SOURCE_DIR/bin/${binary_name}-darwin-${arch_suffix}" "$target_path"
+        command cp -f "$SOURCE_DIR/bin/${binary_name}-darwin-${arch_suffix}" "$target_path"
         chmod +x "$target_path"
         log_success "Installed local ${binary_name} binary"
         return 0
@@ -620,7 +620,7 @@ install_files() {
         else
             local -a bin_files=("$SOURCE_DIR/bin"/*)
             if [[ ${#bin_files[@]} -gt 0 ]]; then
-                cp -r "${bin_files[@]}" "$CONFIG_DIR/bin/"
+                command cp -Rf "${bin_files[@]}" "$CONFIG_DIR/bin/"
                 for file in "$CONFIG_DIR/bin/"*; do
                     [[ -e "$file" ]] && chmod +x "$file"
                 done
@@ -637,7 +637,7 @@ install_files() {
         else
             local -a lib_files=("$SOURCE_DIR/lib"/*)
             if [[ ${#lib_files[@]} -gt 0 ]]; then
-                cp -r "${lib_files[@]}" "$CONFIG_DIR/lib/"
+                command cp -Rf "${lib_files[@]}" "$CONFIG_DIR/lib/"
                 log_success "Installed libraries"
             fi
         fi
@@ -646,7 +646,7 @@ install_files() {
     if [[ "$config_dir_abs" != "$source_dir_abs" ]]; then
         for file in README.md LICENSE install.sh; do
             if [[ -f "$SOURCE_DIR/$file" ]]; then
-                cp -f "$SOURCE_DIR/$file" "$CONFIG_DIR/"
+                command cp -f "$SOURCE_DIR/$file" "$CONFIG_DIR/"
             fi
         done
     fi
