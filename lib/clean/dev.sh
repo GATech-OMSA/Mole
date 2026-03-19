@@ -1032,9 +1032,15 @@ clean_dev_editors() {
     safe_clean ~/Library/Caches/Zed/* "Zed cache"
 }
 # Xcode DerivedData for inactive projects (source directory no longer exists).
+# Lists affected projects before cleanup. In non-dry-run mode, shows which
+# projects will be cleaned so the user can verify they weren't just moved.
 clean_xcode_derived_data() {
     local dd_root="$HOME/Library/Developer/Xcode/DerivedData"
     [[ -d "$dd_root" ]] || return 0
+
+    # First pass: collect stale entries and their missing workspace paths
+    local -a stale_entries=()
+    local -a stale_workspaces=()
 
     local entry
     for entry in "$dd_root"/*/; do
@@ -1046,15 +1052,33 @@ clean_xcode_derived_data() {
         workspace_path=$(defaults read "$plist" WorkspacePath 2>/dev/null) || continue
         [[ -n "$workspace_path" ]] || continue
 
-        # Extract the parent directory of the workspace/project file
         local source_dir
         source_dir=$(dirname "$workspace_path")
 
         if [[ ! -d "$source_dir" ]]; then
-            # Remove trailing slash for clean path
             local clean_entry="${entry%/}"
-            safe_clean "$clean_entry" "Xcode DerivedData (inactive)"
+            stale_entries+=("$clean_entry")
+            stale_workspaces+=("$workspace_path")
         fi
+    done
+
+    if [[ ${#stale_entries[@]} -eq 0 ]]; then
+        note_activity
+        return 0
+    fi
+
+    # Show which projects are considered inactive (helps catch moved projects)
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo -e "  ${GRAY}${ICON_LIST}${NC} ${GRAY}Inactive Xcode projects (source dir missing):${NC}"
+        local i
+        for i in "${!stale_workspaces[@]}"; do
+            echo -e "    ${GRAY}${ICON_SUBLIST} ${stale_workspaces[$i]}${NC}"
+        done
+    fi
+
+    # Second pass: clean
+    for entry in "${stale_entries[@]}"; do
+        safe_clean "$entry" "Xcode DerivedData (inactive)"
     done
     note_activity
 }

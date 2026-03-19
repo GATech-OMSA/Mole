@@ -14,6 +14,10 @@ readonly SCHEDULE_LOG_DIR="$HOME/Library/Logs/mole"
 # Plist Generation
 # ============================================================================
 
+# SAFETY: The scheduled job ALWAYS runs with --dry-run.
+# Unattended cleanup without user review is too risky — moved projects
+# look like inactive DerivedData, whitelists may not be loaded, etc.
+# The schedule serves as a reminder to run cleanup manually.
 generate_plist() {
     local mole_path="$1"
     local interval="$2"
@@ -157,10 +161,19 @@ schedule_install() {
     # Write plist
     echo "$plist_content" > "$SCHEDULE_PLIST_PATH"
 
+    # SAFETY: Verify the written plist contains --dry-run before loading.
+    # This guards against code changes that accidentally remove the flag.
+    if ! grep -q "\-\-dry-run" "$SCHEDULE_PLIST_PATH" 2>/dev/null; then
+        log_error "Safety check failed: plist missing --dry-run flag. Refusing to load."
+        rm -f "$SCHEDULE_PLIST_PATH"
+        return 1
+    fi
+
     # Load the agent
     launchctl bootstrap "gui/$(id -u)" "$SCHEDULE_PLIST_PATH" 2>/dev/null || true
 
     log_success "LaunchAgent installed, schedule: every $(format_interval_human "$interval")"
+    echo -e "  ${GRAY}${ICON_SUBLIST} Runs: mo clean --dry-run (preview only, never auto-deletes)${NC}"
     echo -e "  ${GRAY}${ICON_SUBLIST} ${SCHEDULE_PLIST_PATH}${NC}"
 }
 

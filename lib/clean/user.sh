@@ -1310,8 +1310,19 @@ clean_apple_silicon_caches() {
     end_section
 }
 
+# ============================================================================
+# WARNING: READ-ONLY FUNCTION — DO NOT ADD DELETIONS
+# ============================================================================
 # iCloud storage audit — informational only, never deletes anything.
 # Scans ~/Library/Mobile Documents/ for per-app container sizes.
+#
+# iCloud files deleted locally may be permanently lost if not synced.
+# Any future eviction functionality MUST:
+#   1. Require explicit user confirmation per-file
+#   2. Verify the file is fully uploaded to iCloud before evicting
+#   3. Use `brctl evict` (not rm) which preserves the cloud copy
+#   4. Never run in unattended/scheduled mode
+# ============================================================================
 clean_icloud_audit() {
     local mobile_docs="$HOME/Library/Mobile Documents"
     if [[ ! -d "$mobile_docs" ]]; then
