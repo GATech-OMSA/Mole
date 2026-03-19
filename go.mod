@@ -1,4 +1,4 @@
-module github.com/tw93/mole
+module github.com/GATech-OMSA/Mole
 
 go 1.25.0
 

@@ -12,6 +12,7 @@ func TestCalculateHealthScorePerfect(t *testing.T) {
 		[]DiskStatus{{UsedPercent: 30}},
 		DiskIOStatus{ReadRate: 5, WriteRate: 5},
 		ThermalStatus{CPUTemp: 40},
+		nil,
 	)
 
 	if score != 100 {
@@ -29,6 +30,7 @@ func TestCalculateHealthScoreDetectsIssues(t *testing.T) {
 		[]DiskStatus{{UsedPercent: 95}},
 		DiskIOStatus{ReadRate: 120, WriteRate: 80},
 		ThermalStatus{CPUTemp: 90},
+		nil,
 	)
 
 	if score >= 40 {
@@ -113,6 +115,7 @@ func TestCalculateHealthScoreEdgeCases(t *testing.T) {
 		disks   []DiskStatus
 		diskIO  DiskIOStatus
 		thermal ThermalStatus
+		batts   []BatteryStatus
 		wantMin int
 		wantMax int
 	}{
@@ -123,6 +126,7 @@ func TestCalculateHealthScoreEdgeCases(t *testing.T) {
 			disks:   []DiskStatus{{UsedPercent: 70.0}},
 			diskIO:  DiskIOStatus{ReadRate: 25.0, WriteRate: 25.0},
 			thermal: ThermalStatus{CPUTemp: 60.0},
+			batts:   nil,
 			wantMin: 95,
 			wantMax: 100,
 		},
@@ -133,6 +137,7 @@ func TestCalculateHealthScoreEdgeCases(t *testing.T) {
 			disks:   []DiskStatus{{UsedPercent: 40.0}},
 			diskIO:  DiskIOStatus{ReadRate: 5.0, WriteRate: 5.0},
 			thermal: ThermalStatus{CPUTemp: 40.0},
+			batts:   nil,
 			wantMin: 90,
 			wantMax: 100,
 		},
@@ -143,6 +148,7 @@ func TestCalculateHealthScoreEdgeCases(t *testing.T) {
 			disks:   []DiskStatus{},
 			diskIO:  DiskIOStatus{ReadRate: 5.0, WriteRate: 5.0},
 			thermal: ThermalStatus{CPUTemp: 40.0},
+			batts:   nil,
 			wantMin: 95,
 			wantMax: 100,
 		},
@@ -153,6 +159,7 @@ func TestCalculateHealthScoreEdgeCases(t *testing.T) {
 			disks:   []DiskStatus{{UsedPercent: 40.0}},
 			diskIO:  DiskIOStatus{ReadRate: 5.0, WriteRate: 5.0},
 			thermal: ThermalStatus{CPUTemp: 0},
+			batts:   nil,
 			wantMin: 95,
 			wantMax: 100,
 		},
@@ -160,11 +167,101 @@ func TestCalculateHealthScoreEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			score, _ := calculateHealthScore(tt.cpu, tt.mem, tt.disks, tt.diskIO, tt.thermal)
+			score, _ := calculateHealthScore(tt.cpu, tt.mem, tt.disks, tt.diskIO, tt.thermal, tt.batts)
 			if score < tt.wantMin || score > tt.wantMax {
 				t.Errorf("calculateHealthScore() = %d, want range [%d, %d]", score, tt.wantMin, tt.wantMax)
 			}
 		})
+	}
+}
+
+func TestCalculateHealthScoreBatteryPenalty(t *testing.T) {
+	baseCPU := CPUStatus{Usage: 10}
+	baseMem := MemoryStatus{UsedPercent: 20, Pressure: "normal"}
+	baseDisks := []DiskStatus{{UsedPercent: 30}}
+	baseDiskIO := DiskIOStatus{ReadRate: 5, WriteRate: 5}
+	baseThermal := ThermalStatus{CPUTemp: 40}
+
+	tests := []struct {
+		name      string
+		batts     []BatteryStatus
+		wantMin   int
+		wantMax   int
+		wantIssue string
+	}{
+		{
+			name:    "no batteries should not penalize",
+			batts:   nil,
+			wantMin: 100,
+			wantMax: 100,
+		},
+		{
+			name:    "healthy battery above 80 percent should not penalize",
+			batts:   []BatteryStatus{{Capacity: 92}},
+			wantMin: 100,
+			wantMax: 100,
+		},
+		{
+			name:    "battery at exactly 80 percent should not penalize",
+			batts:   []BatteryStatus{{Capacity: 80}},
+			wantMin: 100,
+			wantMax: 100,
+		},
+		{
+			name:      "battery below 80 percent should reduce score",
+			batts:     []BatteryStatus{{Capacity: 75}},
+			wantMin:   90,
+			wantMax:   99,
+			wantIssue: "Battery Degraded",
+		},
+		{
+			name:      "battery below 70 percent should reduce score more",
+			batts:     []BatteryStatus{{Capacity: 65}},
+			wantMin:   80,
+			wantMax:   95,
+			wantIssue: "Battery Degraded",
+		},
+		{
+			name:    "battery with zero capacity should not penalize",
+			batts:   []BatteryStatus{{Capacity: 0}},
+			wantMin: 100,
+			wantMax: 100,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			score, msg := calculateHealthScore(baseCPU, baseMem, baseDisks, baseDiskIO, baseThermal, tt.batts)
+			if score < tt.wantMin || score > tt.wantMax {
+				t.Errorf("calculateHealthScore() = %d, want range [%d, %d]", score, tt.wantMin, tt.wantMax)
+			}
+			if tt.wantIssue != "" && !strings.Contains(msg, tt.wantIssue) {
+				t.Errorf("calculateHealthScore() msg = %q, should contain %q", msg, tt.wantIssue)
+			}
+		})
+	}
+}
+
+func TestCalculateHealthScoreBatteryRelativeToNoBattery(t *testing.T) {
+	baseCPU := CPUStatus{Usage: 10}
+	baseMem := MemoryStatus{UsedPercent: 20, Pressure: "normal"}
+	baseDisks := []DiskStatus{{UsedPercent: 30}}
+	baseDiskIO := DiskIOStatus{ReadRate: 5, WriteRate: 5}
+	baseThermal := ThermalStatus{CPUTemp: 40}
+
+	scoreNoBatt, _ := calculateHealthScore(baseCPU, baseMem, baseDisks, baseDiskIO, baseThermal, nil)
+	scoreHealthy, _ := calculateHealthScore(baseCPU, baseMem, baseDisks, baseDiskIO, baseThermal, []BatteryStatus{{Capacity: 95}})
+	scoreDegraded, _ := calculateHealthScore(baseCPU, baseMem, baseDisks, baseDiskIO, baseThermal, []BatteryStatus{{Capacity: 75}})
+	scorePoor, _ := calculateHealthScore(baseCPU, baseMem, baseDisks, baseDiskIO, baseThermal, []BatteryStatus{{Capacity: 60}})
+
+	if scoreHealthy != scoreNoBatt {
+		t.Errorf("healthy battery (%d) should equal no battery score (%d)", scoreHealthy, scoreNoBatt)
+	}
+	if scoreDegraded >= scoreNoBatt {
+		t.Errorf("degraded battery (%d) should be less than no battery (%d)", scoreDegraded, scoreNoBatt)
+	}
+	if scorePoor >= scoreDegraded {
+		t.Errorf("poor battery (%d) should be less than degraded (%d)", scorePoor, scoreDegraded)
 	}
 }
 

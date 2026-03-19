@@ -18,7 +18,7 @@ source "$SCRIPT_DIR/lib/core/commands.sh"
 trap cleanup_temp_files EXIT INT TERM
 
 # Version and update helpers
-VERSION="1.30.0"
+VERSION="2.0.0"
 MOLE_TAGLINE="Deep clean and optimize your Mac."
 
 is_touchid_configured() {
@@ -28,14 +28,14 @@ is_touchid_configured() {
 
 get_latest_version() {
     curl -fsSL --connect-timeout 2 --max-time 3 -H "Cache-Control: no-cache" \
-        "https://raw.githubusercontent.com/tw93/mole/main/mole" 2> /dev/null |
+        "https://raw.githubusercontent.com/GATech-OMSA/Mole/main/mole" 2> /dev/null |
         grep '^VERSION=' | head -1 | sed 's/VERSION="\(.*\)"/\1/'
 }
 
 get_latest_version_from_github() {
     local version
     version=$(curl -fsSL --connect-timeout 2 --max-time 3 \
-        "https://api.github.com/repos/tw93/mole/releases/latest" 2> /dev/null |
+        "https://api.github.com/repos/GATech-OMSA/Mole/releases/latest" 2> /dev/null |
         grep '"tag_name"' | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
     version="${version#v}"
     version="${version#V}"
@@ -202,7 +202,7 @@ show_brand_banner() {
 ${GREEN} __  __       _      ${NC}
 ${GREEN}|  \/  | ___ | | ___ ${NC}
 ${GREEN}| |\/| |/ _ \| |/ _ \\${NC}
-${GREEN}| |  | | (_) | |  __/${NC}  ${BLUE}https://github.com/tw93/mole${NC}
+${GREEN}| |  | | (_) | |  __/${NC}  ${BLUE}https://github.com/GATech-OMSA/Mole${NC}
 ${GREEN}|_|  |_|\___/|_|\___|${NC}  ${GREEN}${MOLE_TAGLINE}${NC}
 
 EOF
@@ -284,6 +284,7 @@ show_help() {
     printf "  %s%-28s%s %s\n" "$GREEN" "mo installer --dry-run" "$NC" "Preview installer cleanup"
     printf "  %s%-28s%s %s\n" "$GREEN" "mo touchid enable --dry-run" "$NC" "Preview Touch ID setup"
     printf "  %s%-28s%s %s\n" "$GREEN" "mo completion --dry-run" "$NC" "Preview shell completion edits"
+    printf "  %s%-28s%s %s\n" "$GREEN" "mo log --since 7d" "$NC" "Show recent log entries"
     printf "  %s%-28s%s %s\n" "$GREEN" "mo purge --paths" "$NC" "Configure scan directories"
     printf "  %s%-28s%s %s\n" "$GREEN" "mo analyze /Volumes" "$NC" "Analyze external drives only"
     printf "  %s%-28s%s %s\n" "$GREEN" "mo update --force" "$NC" "Force reinstall latest stable version"
@@ -354,7 +355,7 @@ update_mole() {
         echo "${download_label%...}"
     fi
 
-    local installer_url="https://raw.githubusercontent.com/tw93/mole/main/install.sh"
+    local installer_url="https://raw.githubusercontent.com/GATech-OMSA/Mole/main/install.sh"
     local tmp_installer
     tmp_installer="$(mktemp_file)" || {
         log_error "Update failed"
@@ -944,6 +945,27 @@ main() {
             ;;
         "completion")
             exec "$SCRIPT_DIR/bin/completion.sh" "${args[@]:1}"
+            ;;
+        "size")
+            exec "$SCRIPT_DIR/bin/size.sh" "${args[@]:1}"
+            ;;
+        "doctor")
+            exec "$SCRIPT_DIR/bin/doctor.sh" "${args[@]:1}"
+            ;;
+        "log")
+            exec "$SCRIPT_DIR/bin/log.sh" "${args[@]:1}"
+            ;;
+        "report")
+            exec "$SCRIPT_DIR/bin/report.sh" "${args[@]:1}"
+            ;;
+        "watch")
+            exec "$SCRIPT_DIR/bin/watch.sh" "${args[@]:1}"
+            ;;
+        "schedule")
+            exec "$SCRIPT_DIR/bin/schedule.sh" "${args[@]:1}"
+            ;;
+        "hook")
+            exec "$SCRIPT_DIR/bin/hook.sh" "${args[@]:1}"
             ;;
         "update")
             local force_update=false

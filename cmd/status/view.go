@@ -368,6 +368,16 @@ func renderDiskCard(disks []DiskStatus, io DiskIOStatus) cardData {
 		} else if len(disks) == 1 {
 			lines = append(lines, formatDiskMetaLine(disks[0]))
 		}
+		// Show SMART status for primary disk.
+		if disks[0].SMARTStatus != "" {
+			smartStyle := okStyle
+			if disks[0].SMARTStatus == "Failing" {
+				smartStyle = dangerStyle
+			} else if disks[0].SMARTStatus != "Verified" {
+				smartStyle = subtleStyle
+			}
+			lines = append(lines, "SMART  "+smartStyle.Render(disks[0].SMARTStatus))
+		}
 	}
 	readBar := ioBar(io.ReadRate)
 	writeBar := ioBar(io.WriteRate)
@@ -436,7 +446,11 @@ func renderProcessCard(procs []ProcessInfo) cardData {
 		}
 		name := shorten(p.Name, 12)
 		cpuBar := miniBar(p.CPU)
-		lines = append(lines, fmt.Sprintf("%-12s  %s  %5.1f%%", name, cpuBar, p.CPU))
+		rssText := ""
+		if p.RSS > 0 {
+			rssText = " " + humanBytesShort(uint64(p.RSS))
+		}
+		lines = append(lines, fmt.Sprintf("%-12s  %s  %5.1f%%%s", name, cpuBar, p.CPU, rssText))
 	}
 	if len(lines) == 0 {
 		lines = append(lines, subtleStyle.Render("No data"))
@@ -492,13 +506,17 @@ func renderNetworkCard(netStats []NetworkStatus, history NetworkHistory, proxy P
 		txSparkline := sparkline(history.TxHistory, totalTx, graphWidth)
 		lines = append(lines, fmt.Sprintf("Down   %s  %s", rxSparkline, formatRate(totalRx)))
 		lines = append(lines, fmt.Sprintf("Up     %s  %s", txSparkline, formatRate(totalTx)))
-		// Show proxy and IP on one line.
+		// Show proxy, IP, and connections on one line.
 		var infoParts []string
 		if proxy.Enabled {
 			infoParts = append(infoParts, "Proxy "+proxy.Type)
 		}
 		if primaryIP != "" {
 			infoParts = append(infoParts, primaryIP)
+		}
+		// Show connection count from first interface (aggregated).
+		if len(netStats) > 0 && netStats[0].Connections > 0 {
+			infoParts = append(infoParts, fmt.Sprintf("%d conn", netStats[0].Connections))
 		}
 		if len(infoParts) > 0 {
 			lines = append(lines, strings.Join(infoParts, " · "))

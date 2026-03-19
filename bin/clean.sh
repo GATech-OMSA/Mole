@@ -653,7 +653,15 @@ safe_clean() {
         fi
 
         if [[ "$DRY_RUN" == "true" ]]; then
-            echo -e "  ${YELLOW}${ICON_DRY_RUN}${NC} $label${NC}, ${YELLOW}$size_human dry${NC}"
+            local risk_info risk_level risk_color
+            risk_info=$(classify_cleanup_risk "$description" "${existing_paths[0]:-}")
+            risk_level="${risk_info%%|*}"
+            case "$risk_level" in
+                HIGH)   risk_color="$RED" ;;
+                MEDIUM) risk_color="$YELLOW" ;;
+                *)      risk_color="$GREEN" ;;
+            esac
+            echo -e "  ${risk_color}[${risk_level}]${NC} ${YELLOW}${ICON_DRY_RUN}${NC} $label${NC}, ${YELLOW}$size_human dry${NC}"
 
             local paths_temp
             paths_temp=$(create_temp_file)
@@ -1119,6 +1127,128 @@ perform_cleanup() {
     printf '\n'
 }
 
+# Create an APFS snapshot as a safety net before cleanup.
+# Failures are non-fatal — this is purely a precaution.
+# shellcheck disable=SC2329
+ensure_recent_snapshot() {
+    # Allow skipping via environment variable
+    if [[ "${MO_SKIP_SNAPSHOT:-0}" == "1" ]]; then
+        debug_log "Snapshot creation skipped (MO_SKIP_SNAPSHOT=1)"
+        return 0
+    fi
+
+    # Check if running on APFS; skip if not
+    local fs_type=""
+    fs_type=$(diskutil info / 2>/dev/null | awk -F: '/Type \(Bundle\)/{gsub(/^[ \t]+/,"",$2); print $2}') || true
+    if [[ -z "$fs_type" ]]; then
+        fs_type=$(diskutil info / 2>/dev/null | awk -F: '/File System Personality/{gsub(/^[ \t]+/,"",$2); print $2}') || true
+    fi
+    if [[ "$fs_type" != *"apfs"* && "$fs_type" != *"APFS"* ]]; then
+        debug_log "Not APFS filesystem ($fs_type), skipping snapshot"
+        return 0
+    fi
+
+    # Check for a recent snapshot (within the last hour)
+    local now
+    now=$(date +%s 2>/dev/null || echo "0")
+    local has_recent=false
+    local snapshot_line=""
+
+    while IFS= read -r snapshot_line; do
+        [[ -z "$snapshot_line" ]] && continue
+        # Snapshot format: com.apple.TimeMachine.2024-01-15-143022.local
+        # or: com.apple.TimeMachine.2024-01-15-143022
+        local date_part=""
+        date_part=$(echo "$snapshot_line" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}' || true)
+        if [[ -n "$date_part" ]]; then
+            # Convert 2024-01-15-143022 to timestamp
+            local formatted_date="${date_part:0:10} ${date_part:11:2}:${date_part:13:2}:${date_part:15:2}"
+            local snap_epoch=""
+            snap_epoch=$(date -j -f "%Y-%m-%d %H:%M:%S" "$formatted_date" +%s 2>/dev/null || echo "0")
+            if [[ "$snap_epoch" -gt 0 && "$now" -gt 0 ]]; then
+                local age_seconds=$((now - snap_epoch))
+                if [[ $age_seconds -lt 3600 ]]; then
+                    has_recent=true
+                    break
+                fi
+            fi
+        fi
+    done < <(tmutil listlocalsnapshots / 2>/dev/null || true)
+
+    if [[ "$has_recent" == "true" ]]; then
+        debug_log "Recent APFS snapshot found, skipping creation"
+        return 0
+    fi
+
+    # Create a new local snapshot
+    debug_log "Creating APFS local snapshot as safety net"
+    tmutil localsnapshot 2>/dev/null || true
+    return 0
+}
+
+# Detect first run and force dry-run if needed.
+# Returns 0 if cleanup should proceed normally, 1 if main should exit.
+# shellcheck disable=SC2329
+handle_first_run() {
+    local sentinel_file="$HOME/.config/mole/first_run_done"
+
+    # Skip in test mode
+    if [[ "${MOLE_TEST_MODE:-0}" == "1" ]]; then
+        return 0
+    fi
+
+    # Skip if sentinel exists (not first run)
+    if [[ -f "$sentinel_file" ]]; then
+        return 0
+    fi
+
+    # Skip if already in dry-run mode
+    if [[ "$DRY_RUN" == "true" ]]; then
+        return 0
+    fi
+
+    # Skip if not a terminal (non-interactive)
+    if [[ ! -t 0 ]]; then
+        return 0
+    fi
+
+    # First run detected — force dry-run
+    DRY_RUN=true
+    export MOLE_DRY_RUN=1
+
+    start_cleanup
+    hide_cursor
+    perform_cleanup
+    show_cursor
+
+    echo ""
+    log_info "First run complete! Review the results above."
+    echo ""
+    echo -ne "${PURPLE}${ICON_ARROW}${NC} Run cleanup for real? [y/N] "
+
+    local answer=""
+    read -r answer < /dev/tty || answer=""
+
+    mkdir -p "$(dirname "$sentinel_file")"
+    touch "$sentinel_file"
+
+    if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
+        # Re-run without dry-run
+        DRY_RUN=false
+        unset MOLE_DRY_RUN
+        # Reset counters
+        total_items=0
+        files_cleaned=0
+        total_size_cleaned=0
+        whitelist_skipped_count=0
+        DRY_RUN_SEEN_IDENTITIES=()
+        CLEANUP_DONE=false
+        return 0
+    else
+        exit 0
+    fi
+}
+
 main() {
     for arg in "$@"; do
         case "$arg" in
@@ -1141,10 +1271,14 @@ main() {
         esac
     done
 
-    start_cleanup
-    hide_cursor
-    perform_cleanup
-    show_cursor
+    ensure_recent_snapshot
+
+    if handle_first_run; then
+        start_cleanup
+        hide_cursor
+        perform_cleanup
+        show_cursor
+    fi
     exit 0
 }
 

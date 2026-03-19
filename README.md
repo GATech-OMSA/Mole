@@ -4,12 +4,10 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/tw93/mole/stargazers"><img src="https://img.shields.io/github/stars/tw93/mole?style=flat-square" alt="Stars"></a>
-  <a href="https://github.com/tw93/mole/releases"><img src="https://img.shields.io/github/v/tag/tw93/mole?label=version&style=flat-square" alt="Version"></a>
+  <a href="https://github.com/GATech-OMSA/Mole/stargazers"><img src="https://img.shields.io/github/stars/GATech-OMSA/Mole?style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/GATech-OMSA/Mole/releases"><img src="https://img.shields.io/github/v/tag/GATech-OMSA/Mole?label=version&style=flat-square" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License"></a>
-  <a href="https://github.com/tw93/mole/commits"><img src="https://img.shields.io/github/commit-activity/m/tw93/mole?style=flat-square" alt="Commits"></a>
-  <a href="https://twitter.com/HiTw93"><img src="https://img.shields.io/badge/follow-Tw93-red?style=flat-square&logo=Twitter" alt="Twitter"></a>
-  <a href="https://t.me/+GclQS9ZnxyI2ODQ1"><img src="https://img.shields.io/badge/chat-Telegram-blueviolet?style=flat-square&logo=Telegram" alt="Telegram"></a>
+  <a href="https://github.com/GATech-OMSA/Mole/commits"><img src="https://img.shields.io/github/commit-activity/m/GATech-OMSA/Mole?style=flat-square" alt="Commits"></a>
 </p>
 
 <p align="center">
@@ -36,10 +34,10 @@ brew install mole
 
 ```bash
 # Optional args: -s latest for main branch code, -s 1.17.0 for specific version
-curl -fsSL https://raw.githubusercontent.com/tw93/mole/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/GATech-OMSA/Mole/main/install.sh | bash
 ```
 
-> Note: Mole is built for macOS. An experimental Windows version is available in the [windows branch](https://github.com/tw93/Mole/tree/windows) for early adopters.
+> Note: Mole is built for macOS. Forked from [tw93/Mole](https://github.com/tw93/Mole) with additional features and fixes.
 
 **Run**
 

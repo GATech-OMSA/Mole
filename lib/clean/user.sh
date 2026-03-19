@@ -162,6 +162,15 @@ _clean_mail_downloads() {
     fi
 }
 
+# Clean Mail app attachment downloads cache.
+clean_mail_attachments() {
+    local mail_dl="$HOME/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"
+    if [[ -d "$mail_dl" ]]; then
+        safe_clean "$mail_dl"/* "Mail attachments cache"
+        note_activity
+    fi
+}
+
 # Remove old Google Chrome versions while keeping Current.
 clean_chrome_old_versions() {
     local -a app_paths=(
@@ -1299,4 +1308,43 @@ clean_apple_silicon_caches() {
     safe_clean ~/Library/Caches/com.apple.rosetta.update "Rosetta 2 user cache"
     safe_clean ~/Library/Caches/com.apple.amp.mediasevicesd "Apple Silicon media service cache"
     end_section
+}
+
+# iCloud storage audit — informational only, never deletes anything.
+# Scans ~/Library/Mobile Documents/ for per-app container sizes.
+clean_icloud_audit() {
+    local mobile_docs="$HOME/Library/Mobile Documents"
+    if [[ ! -d "$mobile_docs" ]]; then
+        echo -e "  ${GRAY}${ICON_INFO}${NC} iCloud Drive not found, skipping audit"
+        return 0
+    fi
+
+    echo -e "  ${CYAN}${ICON_INFO}${NC} iCloud local storage audit (read-only)"
+    local found_any=false
+
+    while IFS= read -r -d '' container; do
+        [[ -d "$container" ]] || continue
+        local name
+        name="$(basename "$container")"
+        local size_kb
+        size_kb=$(du -sk "$container" 2>/dev/null | awk '{print $1}') || size_kb=0
+        if [[ "$size_kb" -gt 0 ]]; then
+            local size_human
+            if [[ "$size_kb" -ge 1048576 ]]; then
+                size_human="$((size_kb / 1048576))GB"
+            elif [[ "$size_kb" -ge 1024 ]]; then
+                size_human="$((size_kb / 1024))MB"
+            else
+                size_human="${size_kb}KB"
+            fi
+            echo -e "    ${GRAY}${ICON_LIST} ${name}: ${size_human}${NC}"
+            found_any=true
+        fi
+    done < <(command find "$mobile_docs" -mindepth 1 -maxdepth 1 -print0 2>/dev/null || true)
+
+    if [[ "$found_any" == "false" ]]; then
+        echo -e "    ${GREEN}${ICON_SUCCESS}${NC} No iCloud containers found"
+    fi
+
+    return 0
 }

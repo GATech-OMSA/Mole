@@ -35,9 +35,15 @@ const (
 	// Disk IO (MB/s).
 	ioNormalThreshold = 50.0
 	ioHighThreshold   = 150.0
+
+	// Battery.
+	batteryWarnThreshold     = 80 // Below this, mild penalty
+	batteryCritThreshold     = 70 // Below this, stronger penalty
+	batteryWarnPenalty       = 5.0
+	batteryCritPenalty       = 10.0
 )
 
-func calculateHealthScore(cpu CPUStatus, mem MemoryStatus, disks []DiskStatus, diskIO DiskIOStatus, thermal ThermalStatus) (int, string) {
+func calculateHealthScore(cpu CPUStatus, mem MemoryStatus, disks []DiskStatus, diskIO DiskIOStatus, thermal ThermalStatus, batts []BatteryStatus) (int, string) {
 	score := 100.0
 	issues := []string{}
 
@@ -122,6 +128,18 @@ func calculateHealthScore(cpu CPUStatus, mem MemoryStatus, disks []DiskStatus, d
 		}
 	}
 	score -= ioPenalty
+
+	// Battery capacity penalty.
+	if len(batts) > 0 && batts[0].Capacity > 0 {
+		cap := batts[0].Capacity
+		if cap < batteryCritThreshold {
+			score -= batteryCritPenalty
+			issues = append(issues, "Battery Degraded")
+		} else if cap < batteryWarnThreshold {
+			score -= batteryWarnPenalty
+			issues = append(issues, "Battery Degraded")
+		}
+	}
 
 	// Clamp score.
 	if score < 0 {

@@ -305,3 +305,28 @@ func joinHostPort(host, port string) string {
 	}
 	return host + ":" + port
 }
+
+// collectConnectionCount returns the number of ESTABLISHED TCP connections.
+func collectConnectionCount() int {
+	if runtime.GOOS != "darwin" {
+		return 0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	out, err := runCmd(ctx, "netstat", "-an")
+	if err != nil {
+		return 0
+	}
+	return parseConnectionCount(out)
+}
+
+// parseConnectionCount counts lines containing "ESTABLISHED" in netstat output.
+func parseConnectionCount(netstatOutput string) int {
+	count := 0
+	for line := range strings.Lines(netstatOutput) {
+		if strings.Contains(line, "ESTABLISHED") {
+			count++
+		}
+	}
+	return count
+}

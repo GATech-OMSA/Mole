@@ -12,10 +12,12 @@ GO_DOWNLOAD_RETRIES ?= 3
 # Binaries
 ANALYZE := analyze
 STATUS := status
+WATCH := watch
 
 # Source directories
 ANALYZE_SRC := ./cmd/analyze
 STATUS_SRC := ./cmd/status
+WATCH_SRC := ./cmd/watch
 
 # Build flags
 LDFLAGS := -s -w
@@ -41,18 +43,21 @@ build: mod-download
 	@echo "Building for local architecture..."
 	$(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(ANALYZE)-go $(ANALYZE_SRC)
 	$(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(STATUS)-go $(STATUS_SRC)
+	$(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(WATCH)-go $(WATCH_SRC)
 
 # Release build targets (run on native architectures for CGO support)
 release-amd64: mod-download
 	@echo "Building release binaries (amd64)..."
 	GOOS=darwin GOARCH=amd64 $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(ANALYZE)-darwin-amd64 $(ANALYZE_SRC)
 	GOOS=darwin GOARCH=amd64 $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(STATUS)-darwin-amd64 $(STATUS_SRC)
+	GOOS=darwin GOARCH=amd64 $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(WATCH)-darwin-amd64 $(WATCH_SRC)
 
 release-arm64: mod-download
 	@echo "Building release binaries (arm64)..."
 	GOOS=darwin GOARCH=arm64 $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(ANALYZE)-darwin-arm64 $(ANALYZE_SRC)
 	GOOS=darwin GOARCH=arm64 $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(STATUS)-darwin-arm64 $(STATUS_SRC)
+	GOOS=darwin GOARCH=arm64 $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(WATCH)-darwin-arm64 $(WATCH_SRC)
 
 clean:
 	@echo "Cleaning binaries..."
-	rm -f $(BIN_DIR)/$(ANALYZE)-* $(BIN_DIR)/$(STATUS)-* $(BIN_DIR)/$(ANALYZE)-go $(BIN_DIR)/$(STATUS)-go
+	rm -f $(BIN_DIR)/$(ANALYZE)-* $(BIN_DIR)/$(STATUS)-* $(BIN_DIR)/$(WATCH)-* $(BIN_DIR)/$(ANALYZE)-go $(BIN_DIR)/$(STATUS)-go $(BIN_DIR)/$(WATCH)-go

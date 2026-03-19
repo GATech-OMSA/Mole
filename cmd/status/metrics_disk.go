@@ -95,6 +95,7 @@ func collectDisks() ([]DiskStatus, error) {
 	}
 
 	annotateDiskTypes(disks)
+	annotateSMARTStatus(disks)
 
 	sort.Slice(disks, func(i, j int) bool {
 		// First, prefer internal disks over external
@@ -373,4 +374,40 @@ func (c *Collector) collectDiskIO(now time.Time) DiskIOStatus {
 	}
 
 	return DiskIOStatus{ReadRate: readRate, WriteRate: writeRate}
+}
+
+// annotateSMARTStatus queries SMART health for the primary (first internal) disk.
+func annotateSMARTStatus(disks []DiskStatus) {
+	if len(disks) == 0 || runtime.GOOS != "darwin" || !commandExists("diskutil") {
+		return
+	}
+
+	// Only check the first disk (typically disk0 = internal SSD).
+	base := baseDeviceName(disks[0].Device)
+	if base == "" {
+		base = "disk0"
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	out, err := runCmd(ctx, "diskutil", "info", base)
+	if err != nil {
+		return
+	}
+	if status := parseSMARTStatus(out); status != "" {
+		disks[0].SMARTStatus = status
+	}
+}
+
+// parseSMARTStatus extracts the SMART Status value from diskutil info output.
+func parseSMARTStatus(diskutilOutput string) string {
+	for line := range strings.Lines(diskutilOutput) {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "SMART Status:") {
+			_, after, _ := strings.Cut(trimmed, ":")
+			return strings.TrimSpace(after)
+		}
+	}
+	return ""
 }

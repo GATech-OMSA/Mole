@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,6 +67,8 @@ type MetricsSnapshot struct {
 	HealthScore    int          `json:"health_score"`     // 0-100 system health score
 	HealthScoreMsg string       `json:"health_score_msg"` // Brief explanation
 
+	LastBackup     string            `json:"last_backup,omitempty"`
+
 	CPU            CPUStatus         `json:"cpu"`
 	GPU            []GPUStatus       `json:"gpu"`
 	Memory         MemoryStatus      `json:"memory"`
@@ -98,6 +101,7 @@ type ProcessInfo struct {
 	Name   string  `json:"name"`
 	CPU    float64 `json:"cpu"`
 	Memory float64 `json:"memory"`
+	RSS    int64   `json:"rss,omitempty"`
 }
 
 type CPUStatus struct {
@@ -140,13 +144,15 @@ type DiskStatus struct {
 	UsedPercent float64 `json:"used_percent"`
 	Fstype      string  `json:"fstype"`
 	External    bool    `json:"external"`
+	SMARTStatus string  `json:"smart_status,omitempty"`
 }
 
 type NetworkStatus struct {
-	Name      string  `json:"name"`
-	RxRateMBs float64 `json:"rx_rate_mbs"`
-	TxRateMBs float64 `json:"tx_rate_mbs"`
-	IP        string  `json:"ip"`
+	Name        string  `json:"name"`
+	RxRateMBs   float64 `json:"rx_rate_mbs"`
+	TxRateMBs   float64 `json:"tx_rate_mbs"`
+	IP          string  `json:"ip"`
+	Connections int     `json:"connections,omitempty"`
 }
 
 // NetworkHistory holds the global network usage history.
@@ -249,6 +255,8 @@ func (c *Collector) Collect() (MetricsSnapshot, error) {
 		gpuStats     []GPUStatus
 		btStats      []BluetoothDevice
 		topProcs     []ProcessInfo
+		lastBackup   string
+		connCount    int
 	)
 
 	// Helper to launch concurrent collection.
@@ -300,6 +308,8 @@ func (c *Collector) Collect() (MetricsSnapshot, error) {
 		return nil
 	})
 	collect(func() (err error) { topProcs = collectTopProcesses(); return nil })
+	collect(func() (err error) { lastBackup = collectBackup(); return nil })
+	collect(func() (err error) { connCount = collectConnectionCount(); return nil })
 
 	// Wait for all to complete.
 	wg.Wait()
@@ -313,7 +323,12 @@ func (c *Collector) Collect() (MetricsSnapshot, error) {
 	}
 	hwInfo := c.cachedHW
 
-	score, scoreMsg := calculateHealthScore(cpuStats, memStats, diskStats, diskIO, thermalStats)
+	score, scoreMsg := calculateHealthScore(cpuStats, memStats, diskStats, diskIO, thermalStats, batteryStats)
+
+	// Attach connection count to the first network interface.
+	if connCount > 0 && len(netStats) > 0 {
+		netStats[0].Connections = connCount
+	}
 
 	return MetricsSnapshot{
 		CollectedAt:    now,
@@ -324,6 +339,7 @@ func (c *Collector) Collect() (MetricsSnapshot, error) {
 		Hardware:       hwInfo,
 		HealthScore:    score,
 		HealthScoreMsg: scoreMsg,
+		LastBackup:     lastBackup,
 		CPU:            cpuStats,
 		GPU:            gpuStats,
 		Memory:         memStats,
@@ -340,6 +356,42 @@ func (c *Collector) Collect() (MetricsSnapshot, error) {
 		Bluetooth:    btStats,
 		TopProcesses: topProcs,
 	}, mergeErr
+}
+
+func collectBackup() string {
+	if !commandExists("tmutil") {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	out, err := runCmd(ctx, "tmutil", "latestbackup")
+	if err != nil {
+		return ""
+	}
+	return parseBackupTime(out)
+}
+
+func parseBackupTime(tmutilOutput string) string {
+	trimmed := strings.TrimSpace(tmutilOutput)
+	if trimmed == "" {
+		return "Unknown"
+	}
+
+	// Look for timestamp pattern YYYY-MM-DD-HHMMSS in the path.
+	// Example: /Volumes/Backup/Backups.backupdb/MyMac/2025-03-15-143022
+	parts := strings.Split(trimmed, "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		p := parts[i]
+		if len(p) >= 17 && p[4] == '-' && p[7] == '-' && p[10] == '-' {
+			// Try to parse YYYY-MM-DD-HHMMSS
+			date := p[:10]
+			timeStr := p[11:]
+			if len(timeStr) >= 6 {
+				return fmt.Sprintf("%s %s:%s", date, timeStr[:2], timeStr[2:4])
+			}
+		}
+	}
+	return "Unknown"
 }
 
 func runCmd(ctx context.Context, name string, args ...string) (string, error) {

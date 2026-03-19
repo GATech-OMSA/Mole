@@ -5,6 +5,54 @@ import (
 	"testing"
 )
 
+func TestParseBackupTime(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "standard path with timestamp",
+			input: "/Volumes/Backup/Backups.backupdb/MyMac/2025-03-15-143022",
+			want:  "2025-03-15 14:30",
+		},
+		{
+			name:  "APFS snapshot style path",
+			input: "/Volumes/Backup/2024-12-25-083000",
+			want:  "2024-12-25 08:30",
+		},
+		{
+			name:  "empty output",
+			input: "",
+			want:  "Unknown",
+		},
+		{
+			name:  "error message from tmutil",
+			input: "No machine directory found",
+			want:  "Unknown",
+		},
+		{
+			name:  "path with trailing newline",
+			input: "/Volumes/Backup/Backups.backupdb/MyMac/2025-01-01-120000\n",
+			want:  "2025-01-01 12:00",
+		},
+		{
+			name:  "path with no valid timestamp",
+			input: "/Volumes/Backup/something-else",
+			want:  "Unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseBackupTime(tt.input)
+			if got != tt.want {
+				t.Errorf("parseBackupTime(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNewRingBuffer(t *testing.T) {
 	tests := []struct {
 		name     string

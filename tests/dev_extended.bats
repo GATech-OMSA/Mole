@@ -341,3 +341,280 @@ EOF
     [[ "$output" == *"DEVICE_SUPPORT:iOS DeviceSupport"* ]]
     [[ "$output" == *"SAFE_CLEAN:Android SDK cache"* ]]
 }
+
+# --- Phase 1: Xcode DerivedData (inactive projects) ---
+
+@test "clean_xcode_derived_data cleans entries where source project is missing" {
+    local dd_root="$HOME/Library/Developer/Xcode/DerivedData"
+    mkdir -p "$dd_root/ActiveProject-abcdef"
+    mkdir -p "$dd_root/StaleProject-123456"
+
+    # Create dummy info.plist files so the function processes these entries
+    touch "$dd_root/ActiveProject-abcdef/info.plist"
+    touch "$dd_root/StaleProject-123456/info.plist"
+
+    # Create a source project dir for ActiveProject only
+    local active_src="$HOME/Projects/ActiveProject"
+    mkdir -p "$active_src"
+
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<EOF
+set -euo pipefail
+source "\$PROJECT_ROOT/lib/core/common.sh"
+source "\$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "CLEAN:\$1:\$2"; }
+# Mock defaults read to return workspace paths
+defaults() {
+    local plist="\$2"
+    if [[ "\$plist" == *"ActiveProject"* ]]; then
+        echo "$active_src/ActiveProject.xcodeproj"
+    elif [[ "\$plist" == *"StaleProject"* ]]; then
+        echo "/nonexistent/StaleProject/StaleProject.xcodeproj"
+    fi
+}
+clean_xcode_derived_data
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CLEAN:$dd_root/StaleProject-123456"* ]]
+    [[ "$output" == *"Xcode DerivedData (inactive)"* ]]
+    [[ "$output" != *"CLEAN:$dd_root/ActiveProject-abcdef"* ]]
+}
+
+@test "clean_xcode_derived_data skips when DerivedData dir does not exist" {
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "UNEXPECTED"; }
+clean_xcode_derived_data
+echo "survived"
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"survived"* ]]
+    [[ "$output" != *"UNEXPECTED"* ]]
+}
+
+@test "clean_xcode_derived_data skips entries without info.plist" {
+    local dd_root="$HOME/Library/Developer/Xcode/DerivedData"
+    mkdir -p "$dd_root/NoInfoPlist-aaaaaa"
+
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "UNEXPECTED"; }
+defaults() { echo ""; }
+clean_xcode_derived_data
+echo "survived"
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"survived"* ]]
+    [[ "$output" != *"UNEXPECTED"* ]]
+}
+
+# --- Phase 1: Container runtime caches ---
+
+@test "clean_dev_containers cleans colima cache" {
+    mkdir -p "$HOME/.colima/default/disk"
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "CLEAN:$2"; }
+clean_dev_containers
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CLEAN:Colima disk cache"* ]]
+}
+
+@test "clean_dev_containers cleans podman cache" {
+    mkdir -p "$HOME/.local/share/containers/cache"
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "CLEAN:$2"; }
+clean_dev_containers
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CLEAN:Podman container cache"* ]]
+}
+
+@test "clean_dev_containers cleans rancher desktop cache" {
+    mkdir -p "$HOME/.rd/cache"
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "CLEAN:$2"; }
+clean_dev_containers
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CLEAN:Rancher Desktop cache"* ]]
+}
+
+@test "clean_dev_containers skips when no container dirs exist" {
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "UNEXPECTED"; }
+clean_dev_containers
+echo "survived"
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"survived"* ]]
+    [[ "$output" != *"UNEXPECTED"* ]]
+}
+
+# --- Phase 1: Additional dev tool caches ---
+
+@test "clean_dev_extra_caches cleans Swift PM cache" {
+    mkdir -p "$HOME/Library/Caches/org.swift.swiftpm"
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "CLEAN:$2"; }
+clean_dev_extra_caches
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CLEAN:Swift PM cache"* ]]
+}
+
+@test "clean_dev_extra_caches cleans CocoaPods cache" {
+    mkdir -p "$HOME/Library/Caches/CocoaPods"
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "CLEAN:$2"; }
+clean_dev_extra_caches
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CLEAN:CocoaPods cache"* ]]
+}
+
+@test "clean_dev_extra_caches cleans Gradle caches" {
+    mkdir -p "$HOME/.gradle/caches"
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "CLEAN:$2"; }
+clean_dev_extra_caches
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CLEAN:Gradle caches"* ]]
+}
+
+@test "clean_dev_extra_caches cleans Terraform plugin cache" {
+    mkdir -p "$HOME/.terraform.d/plugin-cache"
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "CLEAN:$2"; }
+clean_dev_extra_caches
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CLEAN:Terraform plugin cache"* ]]
+}
+
+@test "clean_dev_extra_caches cleans Terraform checkpoint cache" {
+    mkdir -p "$HOME/.terraform.d"
+    touch "$HOME/.terraform.d/checkpoint_cache"
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "CLEAN:$2"; }
+clean_dev_extra_caches
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CLEAN:Terraform checkpoint cache"* ]]
+}
+
+@test "clean_dev_extra_caches cleans pre-commit cache" {
+    mkdir -p "$HOME/.cache/pre-commit"
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/dev.sh"
+note_activity() { :; }
+safe_clean() { echo "CLEAN:$2"; }
+clean_dev_extra_caches
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CLEAN:pre-commit cache"* ]]
+}
+
+# --- Phase 1: Jupyter checkpoints in purge targets ---
+
+@test "purge targets include ipynb_checkpoints" {
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/clean/purge_shared.sh"
+printf '%s\n' "${MOLE_PURGE_TARGETS[@]}"
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *".ipynb_checkpoints"* ]]
+}
+
+# --- Phase 1: Mail attachments ---
+
+@test "clean_mail_attachments cleans mail downloads directory" {
+    mkdir -p "$HOME/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/user.sh"
+note_activity() { :; }
+safe_clean() { echo "CLEAN:$2"; }
+clean_mail_attachments
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CLEAN:Mail attachments cache"* ]]
+}
+
+@test "clean_mail_attachments skips when directory does not exist" {
+    run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/user.sh"
+note_activity() { :; }
+safe_clean() { echo "UNEXPECTED"; }
+clean_mail_attachments
+echo "survived"
+EOF
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"survived"* ]]
+    [[ "$output" != *"UNEXPECTED"* ]]
+}

@@ -38,6 +38,7 @@ readonly MOLE_PURGE_TARGETS=(
     ".svelte-kit"   # SvelteKit
     ".astro"        # Astro
     "coverage"      # Code coverage reports
+    ".ipynb_checkpoints" # Jupyter notebook checkpoints
     "DerivedData"   # Xcode
     "Pods"          # CocoaPods
     ".cxx"          # React Native Android NDK build cache

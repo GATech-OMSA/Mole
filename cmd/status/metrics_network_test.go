@@ -7,6 +7,59 @@ import (
 	gopsutilnet "github.com/shirou/gopsutil/v4/net"
 )
 
+func TestParseConnectionCount(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  int
+	}{
+		{
+			name: "multiple established connections",
+			input: `Active Internet connections
+Proto Recv-Q Send-Q  Local Address          Foreign Address        (state)
+tcp4       0      0  192.168.1.5.52341      17.253.144.10.443      ESTABLISHED
+tcp4       0      0  192.168.1.5.52340      17.253.144.10.443      ESTABLISHED
+tcp4       0      0  192.168.1.5.52339      142.250.80.46.443      ESTABLISHED
+tcp4       0      0  192.168.1.5.52338      140.82.113.26.443      CLOSE_WAIT
+tcp4       0      0  192.168.1.5.52337      151.101.1.69.443       TIME_WAIT
+tcp4       0      0  *.80                   *.*                    LISTEN`,
+			want: 3,
+		},
+		{
+			name: "no established connections",
+			input: `Active Internet connections
+Proto Recv-Q Send-Q  Local Address          Foreign Address        (state)
+tcp4       0      0  *.80                   *.*                    LISTEN
+tcp4       0      0  192.168.1.5.52338      140.82.113.26.443      CLOSE_WAIT`,
+			want: 0,
+		},
+		{
+			name:  "empty output",
+			input: "",
+			want:  0,
+		},
+		{
+			name: "only established lines",
+			input: `tcp4       0      0  192.168.1.5.1234       10.0.0.1.443           ESTABLISHED`,
+			want: 1,
+		},
+		{
+			name: "established in mixed case should not match",
+			input: `tcp4       0      0  192.168.1.5.1234       10.0.0.1.443           established`,
+			want: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseConnectionCount(tt.input)
+			if got != tt.want {
+				t.Errorf("parseConnectionCount() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCollectProxyFromEnvSupportsAllProxy(t *testing.T) {
 	env := map[string]string{
 		"ALL_PROXY": "socks5://127.0.0.1:7890",

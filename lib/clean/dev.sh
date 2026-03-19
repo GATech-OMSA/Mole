@@ -1031,6 +1031,54 @@ clean_dev_editors() {
     safe_clean ~/Library/Application\ Support/Code/CachedExtensionVSIXs/* "VS Code extension cache"
     safe_clean ~/Library/Caches/Zed/* "Zed cache"
 }
+# Xcode DerivedData for inactive projects (source directory no longer exists).
+clean_xcode_derived_data() {
+    local dd_root="$HOME/Library/Developer/Xcode/DerivedData"
+    [[ -d "$dd_root" ]] || return 0
+
+    local entry
+    for entry in "$dd_root"/*/; do
+        [[ -d "$entry" ]] || continue
+        local plist="$entry/info.plist"
+        [[ -f "$plist" ]] || continue
+
+        local workspace_path=""
+        workspace_path=$(defaults read "$plist" WorkspacePath 2>/dev/null) || continue
+        [[ -n "$workspace_path" ]] || continue
+
+        # Extract the parent directory of the workspace/project file
+        local source_dir
+        source_dir=$(dirname "$workspace_path")
+
+        if [[ ! -d "$source_dir" ]]; then
+            # Remove trailing slash for clean path
+            local clean_entry="${entry%/}"
+            safe_clean "$clean_entry" "Xcode DerivedData (inactive)"
+        fi
+    done
+    note_activity
+}
+# Container runtime caches (Colima, Podman, Rancher Desktop).
+clean_dev_containers() {
+    if [[ -d "$HOME/.colima/default/disk" ]]; then
+        safe_clean "$HOME/.colima/default/disk"/* "Colima disk cache"
+    fi
+    if [[ -d "$HOME/.local/share/containers/cache" ]]; then
+        safe_clean "$HOME/.local/share/containers/cache"/* "Podman container cache"
+    fi
+    if [[ -d "$HOME/.rd/cache" ]]; then
+        safe_clean "$HOME/.rd/cache"/* "Rancher Desktop cache"
+    fi
+}
+# Extra dev tool caches (Swift PM, CocoaPods, Gradle, Terraform, pre-commit).
+clean_dev_extra_caches() {
+    safe_clean ~/Library/Caches/org.swift.swiftpm/* "Swift PM cache"
+    safe_clean ~/Library/Caches/CocoaPods/* "CocoaPods cache"
+    safe_clean ~/.gradle/caches/* "Gradle caches"
+    safe_clean ~/.terraform.d/plugin-cache/* "Terraform plugin cache"
+    safe_clean ~/.terraform.d/checkpoint_cache "Terraform checkpoint cache"
+    safe_clean ~/.cache/pre-commit/* "pre-commit cache"
+}
 # Main developer tools cleanup sequence.
 clean_developer_tools() {
     stop_section_spinner
@@ -1060,6 +1108,9 @@ clean_developer_tools() {
     clean_dev_elixir
     clean_dev_haskell
     clean_dev_ocaml
+    clean_dev_containers
+    clean_dev_extra_caches
+    clean_xcode_derived_data
 
     # GUI developer applications
     clean_xcode_tools
