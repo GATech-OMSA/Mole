@@ -141,9 +141,15 @@ request_sudo_access() {
         # Clear sudo cache before attempting authentication
         sudo -k 2> /dev/null
 
+        # Sanitize prompt_msg to prevent AppleScript injection via app names.
+        # App names come from disk (user-writable /Applications) and could
+        # contain quotes or AppleScript operators that break out of the string.
+        local safe_msg="${prompt_msg//\\/\\\\}"
+        safe_msg="${safe_msg//\"/\\\"}"
+
         # Display native macOS password dialog
         local password
-        password=$(osascript -e "display dialog \"$prompt_msg\" default answer \"\" with title \"Mole\" with icon caution with hidden answer" -e 'text returned of result' 2> /dev/null)
+        password=$(osascript -e "display dialog \"$safe_msg\" default answer \"\" with title \"Mole\" with icon caution with hidden answer" -e 'text returned of result' 2> /dev/null)
 
         if [[ -z "$password" ]]; then
             # User cancelled the dialog

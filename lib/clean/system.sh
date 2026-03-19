@@ -161,24 +161,40 @@ clean_deep_system() {
     [[ $installer_cleaned -gt 0 ]] && debug_log "Cleaned $installer_cleaned macOS installer(s)"
     start_section_spinner "Scanning browser code signature caches..."
     local code_sign_cleaned=0
-    while IFS= read -r -d '' cache_dir; do
-        if safe_sudo_remove "$cache_dir"; then
+    if [[ "${DRY_RUN:-}" == "true" ]]; then
+        while IFS= read -r -d '' cache_dir; do
+            log_info "[DRY-RUN] Would sudo remove: directory $cache_dir"
             code_sign_cleaned=$((code_sign_cleaned + 1))
-        fi
-    done < <(run_with_timeout 5 command find /private/var/folders -type d -name "*.code_sign_clone" -path "*/X/*" -print0 2> /dev/null || true)
+        done < <(run_with_timeout 5 command find /private/var/folders -type d -name "*.code_sign_clone" -path "*/X/*" -print0 2> /dev/null || true)
+    else
+        while IFS= read -r -d '' cache_dir; do
+            if safe_sudo_remove "$cache_dir"; then
+                code_sign_cleaned=$((code_sign_cleaned + 1))
+            fi
+        done < <(run_with_timeout 5 command find /private/var/folders -type d -name "*.code_sign_clone" -path "*/X/*" -print0 2> /dev/null || true)
+    fi
     stop_section_spinner
     [[ $code_sign_cleaned -gt 0 ]] && log_success "Browser code signature caches, $code_sign_cleaned items"
 
     local diag_base="/private/var/db/diagnostics"
     start_section_spinner "Cleaning system diagnostic logs..."
-    safe_sudo_find_delete "$diag_base" "*" "$MOLE_LOG_AGE_DAYS" "f" || true
-    safe_sudo_find_delete "$diag_base" "*.tracev3" "30" "f" || true
-    safe_sudo_find_delete "/private/var/db/DiagnosticPipeline" "*" "$MOLE_LOG_AGE_DAYS" "f" || true
+    if [[ "${DRY_RUN:-}" == "true" ]]; then
+        log_info "[DRY-RUN] Would sudo clean: $diag_base"
+        log_info "[DRY-RUN] Would sudo clean: /private/var/db/DiagnosticPipeline"
+    else
+        safe_sudo_find_delete "$diag_base" "*" "$MOLE_LOG_AGE_DAYS" "f" || true
+        safe_sudo_find_delete "$diag_base" "*.tracev3" "30" "f" || true
+        safe_sudo_find_delete "/private/var/db/DiagnosticPipeline" "*" "$MOLE_LOG_AGE_DAYS" "f" || true
+    fi
     stop_section_spinner
     log_success "System diagnostic logs"
 
     start_section_spinner "Cleaning power logs..."
-    safe_sudo_find_delete "/private/var/db/powerlog" "*" "$MOLE_LOG_AGE_DAYS" "f" || true
+    if [[ "${DRY_RUN:-}" == "true" ]]; then
+        log_info "[DRY-RUN] Would sudo clean: /private/var/db/powerlog"
+    else
+        safe_sudo_find_delete "/private/var/db/powerlog" "*" "$MOLE_LOG_AGE_DAYS" "f" || true
+    fi
     stop_section_spinner
     log_success "Power logs"
     start_section_spinner "Cleaning memory exception reports..."

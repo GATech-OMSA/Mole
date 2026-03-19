@@ -73,34 +73,35 @@ validate_path_for_deletion() {
         return 1
     fi
 
-    # Check symlink target if path is a symbolic link
+    # Check symlink target if path is a symbolic link.
+    # Resolve the full symlink chain (not just one hop) to prevent
+    # multi-hop chains from bypassing system path protection.
     if [[ -L "$path" ]]; then
-        local link_target
-        link_target=$(readlink "$path" 2> /dev/null) || {
-            log_error "Cannot read symlink: $path"
+        local resolved_target=""
+
+        # Use readlink -f (or Python fallback) to resolve the entire chain
+        if readlink -f "$path" > /dev/null 2>&1; then
+            resolved_target=$(readlink -f "$path" 2> /dev/null) || resolved_target=""
+        else
+            # macOS readlink doesn't support -f; use perl as fallback
+            resolved_target=$(perl -MCwd -e 'print Cwd::realpath($ARGV[0])' "$path" 2> /dev/null) || resolved_target=""
+        fi
+
+        if [[ -z "$resolved_target" ]]; then
+            log_error "Cannot resolve symlink chain: $path"
             return 1
-        }
-
-        # Resolve relative symlinks to absolute paths for validation
-        local resolved_target="$link_target"
-        if [[ "$link_target" != /* ]]; then
-            local link_dir
-            link_dir=$(dirname "$path")
-            resolved_target=$(cd "$link_dir" 2> /dev/null && cd "$(dirname "$link_target")" 2> /dev/null && pwd)/$(basename "$link_target") || resolved_target=""
         fi
 
-        # Validate resolved target against protected paths
-        if [[ -n "$resolved_target" ]]; then
-            case "$resolved_target" in
-                / | /System | /System/* | /bin | /bin/* | /sbin | /sbin/* | \
-                    /usr | /usr/bin | /usr/bin/* | /usr/lib | /usr/lib/* | \
-                    /etc | /etc/* | /private/etc | /private/etc/* | \
-                    /Library/Extensions | /Library/Extensions/*)
-                    log_error "Symlink points to protected system path: $path -> $resolved_target"
-                    return 1
-                    ;;
-            esac
-        fi
+        # Validate fully resolved target against protected paths
+        case "$resolved_target" in
+            / | /System | /System/* | /bin | /bin/* | /sbin | /sbin/* | \
+                /usr | /usr/bin | /usr/bin/* | /usr/lib | /usr/lib/* | \
+                /etc | /etc/* | /private/etc | /private/etc/* | \
+                /Library/Extensions | /Library/Extensions/*)
+                log_error "Symlink points to protected system path: $path -> $resolved_target"
+                return 1
+                ;;
+        esac
     fi
 
     # Check path is absolute
@@ -277,12 +278,17 @@ safe_remove() {
     fi
 }
 
-# Safe symlink removal (for pre-validated symlinks only)
+# Safe symlink removal with path validation
 safe_remove_symlink() {
     local path="$1"
     local use_sudo="${2:-false}"
 
     if [[ ! -L "$path" ]]; then
+        return 1
+    fi
+
+    # Validate path before removal — prevents traversal and system path deletion
+    if ! validate_path_for_deletion "$path"; then
         return 1
     fi
 

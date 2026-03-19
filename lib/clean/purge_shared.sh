@@ -132,6 +132,24 @@ mole_purge_read_paths_config() {
         line="${line%"${line##*[![:space:]]}"}"
         [[ -z "$line" || "$line" =~ ^# ]] && continue
         line="${line/#\~/$HOME}"
+
+        # Validate: must be absolute, not filesystem root, and under $HOME.
+        # Prevents social engineering attacks where a user is tricked into
+        # adding "/" or "/usr" to their purge_paths config, which would scan
+        # and potentially delete build artifacts from system directories.
+        if [[ "$line" != /* ]]; then
+            log_warning "Ignoring non-absolute purge path: $line"
+            continue
+        fi
+        if [[ "$line" == "/" ]]; then
+            log_warning "Ignoring unsafe purge path: $line"
+            continue
+        fi
+        if [[ "$line" != "$HOME"* ]]; then
+            log_warning "Ignoring purge path outside home directory: $line"
+            continue
+        fi
+
         printf '%s\n' "$line"
     done < "$config_file"
 }
